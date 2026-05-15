@@ -1,0 +1,9 @@
+{
+  "name": "fetch-prices",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": "20" },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
