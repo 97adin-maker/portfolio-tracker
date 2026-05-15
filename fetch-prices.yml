@@ -1,0 +1,27 @@
+name: Fetch Stock Prices
+
+on:
+  schedule:
+    # Every 15 min, Mon-Fri, 8am-8pm Berlin time (UTC+2 in summer = 6-18 UTC)
+    - cron: '*/15 6-18 * * 1-5'
+  workflow_dispatch: # allows manual trigger from GitHub UI
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd scripts && npm install
+
+      - name: Fetch and save prices
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+        run: node scripts/fetch-prices.js
