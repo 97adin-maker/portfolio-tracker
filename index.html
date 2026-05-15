@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio Tracker</title>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f; color: #e5e5e5; padding: 2rem; min-height: 100vh;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 2rem; max-width: 900px; margin-left: auto; margin-right: auto;
+    }
+    h1 { font-size: 18px; font-weight: 600; color: #fff; }
+    .updated { font-size: 12px; color: #444; }
+    .live-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: #4ade80; margin-right: 6px; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px; max-width: 900px; margin: 0 auto;
+    }
+    .stock-card {
+      background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+      padding: 1.25rem; transition: border-color .2s;
+    }
+    .stock-card:hover { border-color: #3a3a3a; }
+    .stock-card.up   { border-left: 3px solid #4ade80; }
+    .stock-card.down { border-left: 3px solid #f87171; }
+    .card-symbol { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+    .card-name   { font-size: 11px; color: #555; margin-bottom: 12px; }
+    .card-price  { font-size: 22px; font-weight: 600; color: #fff; }
+    .card-change { font-size: 12px; margin-top: 4px; }
+    .up-text  { color: #4ade80; }
+    .dn-text  { color: #f87171; }
+    .card-meta { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid #222; }
+    .meta-item { font-size: 10px; color: #555; }
+    .meta-val  { font-size: 11px; color: #888; margin-top: 2px; }
+    .loading {
+      text-align: center; color: #444; font-size: 14px;
+      padding: 4rem; max-width: 900px; margin: 0 auto;
+    }
+    .error-card {
+      background: #1f0a0a; border: 1px solid #3f1515; border-radius: 12px;
+      padding: 1.25rem; color: #f87171; font-size: 13px;
+      max-width: 900px; margin: 0 auto;
+    }
+    .badge {
+      display: inline-block; font-size: 10px; background: #0f2a1f;
+      color: #4ade80; border: 1px solid #1a4a30; border-radius: 4px;
+      padding: 2px 7px; margin-left: 8px; vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Portfolio Tracker <span class="badge">XETRA · EUR</span></h1>
+  </div>
+  <div class="updated" id="updated">Loading…</div>
+</header>
+
+<div id="grid" class="grid">
+  <div class="loading">
+    <span class="live-dot"></span> Connecting to database…
+  </div>
+</div>
+
+<script>
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEP: Replace the values below with your Firebase project config.
+  // Find them in Firebase Console → Project Settings → Your apps → Config
+  // ─────────────────────────────────────────────────────────────────────────
+  const firebaseConfig = {
+    apiKey:            "YOUR_API_KEY",
+    authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL:       "YOUR_DATABASE_URL",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  function fEur(v) {
+    if (v == null) return '—';
+    return '€' + Number(v).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function fVol(v) {
+    if (!v) return '—';
+    if (v >= 1e6) return (v/1e6).toFixed(2) + 'M';
+    if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+    return String(v);
+  }
+
+  function renderCard(sym, d) {
+    if (d.error) {
+      return `<div class="stock-card">
+        <div class="card-symbol">${sym}</div>
+        <div class="card-name" style="color:#f87171">${d.error}</div>
+      </div>`;
+    }
+    const up  = d.change >= 0;
+    const cls = up ? 'up' : 'down';
+    const chgTxt = (up ? '▲ +' : '▼ ') + Math.abs(d.change).toFixed(2) +
+                   ' (' + Math.abs(d.changePercent).toFixed(2) + '%)';
+    return `<div class="stock-card ${cls}">
+      <div class="card-symbol">${d.symbol || sym + '.DE'}</div>
+      <div class="card-name">${d.exchangeName || 'XETRA'}</div>
+      <div class="card-price">${fEur(d.price)}</div>
+      <div class="card-change ${up ? 'up-text' : 'dn-text'}">${chgTxt}</div>
+      <div class="card-meta">
+        <div class="meta-item">High<div class="meta-val">${fEur(d.high)}</div></div>
+        <div class="meta-item">Low<div class="meta-val">${fEur(d.low)}</div></div>
+        <div class="meta-item">Volume<div class="meta-val">${fVol(d.volume)}</div></div>
+      </div>
+    </div>`;
+  }
+
+  // Listen to Firebase Realtime Database — updates live when GitHub Action runs
+  db.ref('prices').on('value', snapshot => {
+    const prices = snapshot.val();
+    const grid   = document.getElementById('grid');
+
+    if (!prices) {
+      grid.innerHTML = '<div class="loading">No data yet. GitHub Action hasn\'t run yet — wait a few minutes or trigger it manually.</div>';
+      return;
+    }
+
+    grid.innerHTML = Object.entries(prices)
+      .map(([sym, data]) => renderCard(sym, data))
+      .join('');
+  });
+
+  db.ref('lastUpdated').on('value', snapshot => {
+    const ts = snapshot.val();
+    if (ts) {
+      const d = new Date(ts).toLocaleString('de-DE');
+      document.getElementById('updated').innerHTML =
+        '<span class="live-dot"></span>Last updated: ' + d;
+    }
+  });
+</script>
+</body>
+</html>
